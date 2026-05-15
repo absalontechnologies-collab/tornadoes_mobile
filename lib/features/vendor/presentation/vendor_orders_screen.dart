@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../data/providers/vendor_provider.dart';
 
-class VendorOrdersScreen extends StatelessWidget {
+class VendorOrdersScreen extends ConsumerStatefulWidget {
   const VendorOrdersScreen({super.key});
+
+  @override
+  ConsumerState<VendorOrdersScreen> createState() => _VendorOrdersScreenState();
+}
+
+class _VendorOrdersScreenState extends ConsumerState<VendorOrdersScreen> {
+  String _selectedStatus = 'Tous';
 
   @override
   Widget build(BuildContext context) {
@@ -49,125 +58,130 @@ class VendorOrdersScreen extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 child: Row(
                   children: [
-                    _buildFilterTab('Tous', true, theme),
+                    _buildFilterTab('Tous', _selectedStatus == 'Tous', theme),
                     const SizedBox(width: 8),
-                    _buildFilterTab('À préparer', false, theme),
+                    _buildFilterTab('À préparer', _selectedStatus == 'À préparer', theme),
                     const SizedBox(width: 8),
-                    _buildFilterTab('Prêt', false, theme),
+                    _buildFilterTab('Prêt', _selectedStatus == 'Prêt', theme),
                     const SizedBox(width: 8),
-                    _buildFilterTab('Livré', false, theme),
+                    _buildFilterTab('Livré', _selectedStatus == 'Livré', theme),
                   ],
                 ),
               ),
               
               const SizedBox(height: 24),
               
-              // Orders Grid
-              Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildOrderCard(
-                          id: '#ORD-9921', name: 'Jean Dupont', status: 'À préparer', 
-                          total: '8 500', isUrgent: false,
-                          items: [
-                            {'icon': Icons.restaurant, 'text': '1x Burger Gourmet Deluxe'},
-                            {'icon': Icons.local_bar, 'text': '2x Jus de Gingembre frais'},
-                          ], theme: theme, isDark: isDark, context: context
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildOrderCard(
-                          id: '#ORD-9925', name: 'Aminata Traoré', status: 'Prêt', 
-                          total: '12 000', isUrgent: false,
-                          items: [
-                            {'icon': Icons.dinner_dining, 'text': '3x Riz au Gras Royal'},
-                          ], theme: theme, isDark: isDark, context: context
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildOrderCard(
-                          id: '#ORD-9918', name: 'Koffi Yao', status: 'Livré', 
-                          total: '5 500', isUrgent: false,
-                          items: [
-                            {'icon': Icons.bakery_dining, 'text': '1x Assortiment de Pâtisseries'},
-                          ], theme: theme, isDark: isDark, context: context
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildOrderCard(
-                          id: '#ORD-9932', name: 'Fatou Sow', status: 'À préparer', 
-                          total: '18 200', isUrgent: true,
-                          items: [
-                            {'icon': Icons.fastfood, 'text': '4x Menus Burger King Size'},
-                          ], theme: theme, isDark: isDark, context: context
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+              // Orders Grid from Stream
+              ref.watch(vendorOrdersStreamProvider).when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stack) => Center(child: Text('Erreur: $error', style: TextStyle(color: theme.colorScheme.error))),
+                data: (allOrders) {
                   
-                  // Summary Banner
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF5F5E5E),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('RÉSUMÉ DU JOUR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70, letterSpacing: 1.0)),
-                        const SizedBox(height: 16),
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            Column(
-                              children: [
-                                Text('24', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-                                Text('Commandes', style: TextStyle(fontSize: 10, color: Colors.white70)),
-                              ],
+                  // Filter logic based on status mapping (customize mapping as needed)
+                  final displayedOrders = allOrders.where((order) {
+                    if (_selectedStatus == 'Tous') return true;
+                    final status = order['status'] ?? '';
+                    if (_selectedStatus == 'À préparer' && status == 'PENDING') return true;
+                    if (_selectedStatus == 'Prêt' && status == 'READY') return true;
+                    if (_selectedStatus == 'Livré' && status == 'DELIVERED') return true;
+                    return false;
+                  }).toList();
+
+                  if (displayedOrders.isEmpty) {
+                    return const Center(child: Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: Text('Aucune commande trouvée.', style: TextStyle(color: Colors.grey)),
+                    ));
+                  }
+
+                  // Group orders in rows of 2
+                  final rows = <Widget>[];
+                  for (var i = 0; i < displayedOrders.length; i += 2) {
+                    rows.add(
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildOrderCardFromData(
+                              orderData: displayedOrders[i],
+                              theme: theme,
+                              isDark: isDark,
+                              context: context
                             ),
-                            Column(
-                              children: [
-                                Text('145k', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-                                Text('Revenu FCFA', style: TextStyle(fontSize: 10, color: Colors.white70)),
-                              ],
-                            )
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: i + 1 < displayedOrders.length
+                                ? _buildOrderCardFromData(
+                                    orderData: displayedOrders[i + 1],
+                                    theme: theme,
+                                    isDark: isDark,
+                                    context: context
+                                  )
+                                : const SizedBox(),
+                          ),
+                        ],
+                      ),
+                    );
+                    rows.add(const SizedBox(height: 16));
+                  }
+                  
+                  return Column(children: rows);
+                },
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Summary Banner
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF5F5E5E),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('RÉSUMÉ DU JOUR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70, letterSpacing: 1.0)),
+                    const SizedBox(height: 16),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        Column(
+                          children: [
+                            Text('24', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                            Text('Commandes', style: TextStyle(fontSize: 10, color: Colors.white70)),
                           ],
                         ),
-                        const SizedBox(height: 24),
-                        Container(
-                          width: double.infinity,
-                          height: 6,
-                          decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(3)),
-                          child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: 0.75,
-                            child: Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Column(
                           children: [
-                            Text('Objectif journalier', style: TextStyle(fontSize: 10, color: Colors.white70)),
-                            Text('75%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                            Text('145k', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                            Text('Revenu FCFA', style: TextStyle(fontSize: 10, color: Colors.white70)),
                           ],
                         )
                       ],
                     ),
-                  )
-                ],
+                    const SizedBox(height: 24),
+                    Container(
+                      width: double.infinity,
+                      height: 6,
+                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(3)),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: 0.75,
+                        child: Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Objectif journalier', style: TextStyle(fontSize: 10, color: Colors.white70)),
+                        Text('75%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                      ],
+                    )
+                  ],
+                ),
               ),
               const SizedBox(height: 80), // Padding for bottom nav
             ],
@@ -179,20 +193,64 @@ class VendorOrdersScreen extends StatelessWidget {
   }
 
   Widget _buildFilterTab(String title, bool isSelected, ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: isSelected ? theme.primaryColor : Colors.grey.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: isSelected ? Colors.white : Colors.grey.shade600,
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedStatus = title;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? theme.primaryColor : Colors.grey.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : Colors.grey.shade600,
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildOrderCardFromData({
+    required Map<String, dynamic> orderData,
+    required ThemeData theme,
+    required bool isDark,
+    required BuildContext context,
+  }) {
+    final rawId = orderData['id']?.toString() ?? 'N/A';
+    final id = '#ORD-${rawId.length > 4 ? rawId.substring(rawId.length - 4) : rawId}';
+    final name = 'Client'; // Could fetch from users table via client_id
+    final totalAmount = orderData['total_amount']?.toString() ?? '0';
+    
+    // Status mapping
+    final rawStatus = orderData['status'] ?? 'PENDING';
+    String status = 'À préparer';
+    if (rawStatus == 'READY') status = 'Prêt';
+    if (rawStatus == 'DELIVERED') status = 'Livré';
+    
+    final isUrgent = rawStatus == 'PENDING'; // Mock logic for urgent
+    
+    // Mock items since we don't fetch order_items in this stream yet
+    final items = [
+      {'icon': Icons.shopping_bag, 'text': '1x Article(s)'},
+    ];
+
+    return _buildOrderCard(
+      id: id,
+      name: name,
+      status: status,
+      total: totalAmount,
+      isUrgent: isUrgent,
+      items: items,
+      theme: theme,
+      isDark: isDark,
+      context: context,
     );
   }
 
@@ -222,7 +280,7 @@ class VendorOrdersScreen extends StatelessWidget {
     }
 
     return GestureDetector(
-      onTap: () => context.push('/vendor-order-details'),
+      onTap: () => context.push('/vendor-order-details'), // Could pass extra here
       child: Container(
         height: 280, // Fixed height to align the grid horizontally
         padding: const EdgeInsets.all(16),
@@ -356,7 +414,7 @@ class VendorOrdersScreen extends StatelessWidget {
     final color = isActive ? Theme.of(context).primaryColor : Colors.grey;
     return GestureDetector(
       onTap: () {
-        if (route != null) context.push(route);
+        if (route != null && !isActive) context.push(route);
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,

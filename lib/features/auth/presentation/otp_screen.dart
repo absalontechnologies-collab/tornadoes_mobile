@@ -1,8 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../data/repositories/auth_repository.dart';
 
-class OtpScreen extends StatelessWidget {
-  const OtpScreen({super.key});
+class OtpScreen extends StatefulWidget {
+  final String phone;
+  const OtpScreen({super.key, required this.phone});
+
+  @override
+  State<OtpScreen> createState() => _OtpScreenState();
+}
+
+class _OtpScreenState extends State<OtpScreen> {
+  final _authRepository = AuthRepository();
+  final List<TextEditingController> _controllers = List.generate(6, (index) => TextEditingController());
+  final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
+    for (var node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  void _verifyOtp() async {
+    final token = _controllers.map((c) => c.text).join();
+    if (token.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Veuillez entrer le code complet à 6 chiffres.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final success = await _authRepository.verifyOTP(widget.phone, token);
+
+    setState(() => _isLoading = false);
+
+    if (success) {
+      if (mounted) {
+        // Go to pin setup or home
+        context.push('/pin-setup');
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Code invalide. Veuillez réessayer.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,22 +85,21 @@ class OtpScreen extends StatelessWidget {
                   text: 'Entrez le code envoyé au ',
                   style: TextStyle(fontSize: 16, color: isDark ? Colors.grey.shade400 : Colors.grey.shade700),
                   children: [
-                    TextSpan(text: '+225 07 00 00 00 00', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                    TextSpan(text: widget.phone, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
                     const TextSpan(text: ' pour valider votre identité.'),
                   ],
                 ),
               ),
               const SizedBox(height: 48),
               
-              // OTP Input Grid
+              // OTP Input Grid (6 digits for Supabase OTP)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(4, (index) => _buildOtpInput(theme)),
+                children: List.generate(6, (index) => _buildOtpInput(theme, index)),
               ),
               
               const SizedBox(height: 48),
               
-              // Resend UI
               Center(
                 child: Column(
                   children: [
@@ -88,27 +137,30 @@ class OtpScreen extends StatelessWidget {
               
               const Spacer(),
               
-              // Verify Button
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    context.push('/pin-setup');
-                  },
+                  onPressed: _isLoading ? null : _verifyOtp,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.primaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Vérifier', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      SizedBox(width: 8),
-                      Icon(Icons.check_circle),
-                    ],
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('Vérifier', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            SizedBox(width: 8),
+                            Icon(Icons.check_circle),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -121,7 +173,6 @@ class OtpScreen extends StatelessWidget {
               ),
               const Spacer(),
               
-              // Security Card
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -160,25 +211,34 @@ class OtpScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildOtpInput(ThemeData theme) {
+  Widget _buildOtpInput(ThemeData theme, int index) {
     return Container(
-      width: 64,
-      height: 80,
+      width: 48, // Reduced width to fit 6 digits
+      height: 60,
       decoration: BoxDecoration(
         color: Colors.grey.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
       ),
       alignment: Alignment.center,
-      child: const TextField(
+      child: TextField(
+        controller: _controllers[index],
+        focusNode: _focusNodes[index],
         textAlign: TextAlign.center,
         keyboardType: TextInputType.number,
         maxLength: 1,
-        style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-        decoration: InputDecoration(
+        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        decoration: const InputDecoration(
           counterText: '',
           border: InputBorder.none,
           hintText: '•',
         ),
+        onChanged: (value) {
+          if (value.isNotEmpty && index < 5) {
+            _focusNodes[index + 1].requestFocus();
+          } else if (value.isEmpty && index > 0) {
+            _focusNodes[index - 1].requestFocus();
+          }
+        },
       ),
     );
   }

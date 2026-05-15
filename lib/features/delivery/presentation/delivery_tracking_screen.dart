@@ -1,10 +1,50 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../data/repositories/delivery_repository.dart';
 
-class DeliveryTrackingScreen extends StatelessWidget {
-  const DeliveryTrackingScreen({super.key});
+class DeliveryTrackingScreen extends StatefulWidget {
+  final Map<String, dynamic>? deliveryData;
+  const DeliveryTrackingScreen({super.key, this.deliveryData});
+
+  @override
+  State<DeliveryTrackingScreen> createState() => _DeliveryTrackingScreenState();
+}
+
+class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
+  Timer? _gpsTimer;
+  double _mockLat = 14.6928;
+  double _mockLng = -17.4467;
+
+  @override
+  void initState() {
+    super.initState();
+    _startGpsSimulation();
+  }
+
+  void _startGpsSimulation() {
+    // Simulate GPS moving
+    _gpsTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      _mockLat += 0.0001;
+      _mockLng += 0.0001;
+      
+      try {
+        final repo = DeliveryRepository();
+        await repo.updateLocation(123, _mockLat, _mockLng);
+        debugPrint('GPS updated: $_mockLat, $_mockLng');
+      } catch (e) {
+        debugPrint('Error updating GPS: $e');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _gpsTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

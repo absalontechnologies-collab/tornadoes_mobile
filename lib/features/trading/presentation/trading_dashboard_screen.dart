@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../providers/trading_provider.dart';
 
-class TradingDashboardScreen extends StatelessWidget {
+class TradingDashboardScreen extends ConsumerWidget {
   const TradingDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    
+    final tradingPlansAsync = ref.watch(tradingPlansProvider);
+    final activeSessionsAsync = ref.watch(activeTradingSessionsProvider);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -199,43 +204,33 @@ class TradingDashboardScreen extends StatelessWidget {
             
             SizedBox(
               height: 250,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.none,
-                children: [
-                  _buildForfaitCard(
-                    title: 'Essentiel Sahel', 
-                    subtitle: 'Première nécessité en transit.', 
-                    price: '50 000 FCFA', 
-                    retour: '+8% / 30j', 
-                    level: 'Niveau 1',
-                    isFeatured: false,
-                    theme: theme,
-                    isDark: isDark
-                  ),
-                  const SizedBox(width: 16),
-                  _buildForfaitCard(
-                    title: 'Croissance Plus', 
-                    subtitle: 'Textiles et matériel importé.', 
-                    price: '250 000 FCFA', 
-                    retour: '+15% / 60j', 
-                    level: 'Niveau 2',
-                    isFeatured: true,
-                    theme: theme,
-                    isDark: isDark
-                  ),
-                  const SizedBox(width: 16),
-                  _buildForfaitCard(
-                    title: 'Expert Hub', 
-                    subtitle: 'Portefeuille diversifié.', 
-                    price: '1 000 000 FCFA', 
-                    retour: '+22% / 90j', 
-                    level: 'Niveau 3',
-                    isFeatured: false,
-                    theme: theme,
-                    isDark: isDark
-                  ),
-                ],
+              child: tradingPlansAsync.when(
+                data: (plans) {
+                  if (plans.isEmpty) {
+                    return const Center(child: Text('Aucun forfait disponible.'));
+                  }
+                  return ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    itemCount: plans.length,
+                    separatorBuilder: (context, index) => const SizedBox(width: 16),
+                    itemBuilder: (context, index) {
+                      final plan = plans[index];
+                      return _buildForfaitCard(
+                        title: plan['title'] ?? '',
+                        subtitle: plan['subtitle'] ?? '',
+                        price: '${plan['price']} FCFA',
+                        retour: '${plan['return_rate']} / ${plan['duration_days']}j',
+                        level: plan['level'] ?? '',
+                        isFeatured: plan['is_featured'] == true,
+                        theme: theme,
+                        isDark: isDark,
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, stack) => Center(child: Text('Erreur: $err')),
               ),
             ),
             
@@ -245,28 +240,36 @@ class TradingDashboardScreen extends StatelessWidget {
             const Text('Trades en Transit', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             
-            GestureDetector(
-              onTap: () => context.push('/trading-transit'),
-              child: _buildTradeItem(
-                title: 'Ciment Portland - Transit Lomé',
-                subtitle: 'Arrivée prévue : 12 Oct.',
-                investAmount: '75 000',
-                progress: 0.65,
-                imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAfRHS3SdxxsGs49q6ZWydW2Vu63p-6f8X2JwpYVtkVAdsxbd1oovzEi2NaNNjiHiRUxlCFDgjt79vb8uBHxnFBvKTK8U8Req0zjGBFwhlVXeU4qgQ5a4T4vagCMNWZQ2aP9DCjf2m05e5CC1kQwEP8TrBCyUvGdWgZUWrovxQ6vgMdbD8kHcdhv7loL20mkwubl4GNPjcEYvG-IdtC_UDeRcl1J-N1cqycvbBYNiDw_NgewYHx_Xd_gQcmrGZODfyNFZ9rRaWhAS9k',
-                theme: theme
-              ),
-            ),
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: () => context.push('/trading-transit'),
-              child: _buildTradeItem(
-                title: 'Anacarde - Export Europe',
-                subtitle: 'Phase : Contrôle Qualité',
-                investAmount: '120 000',
-                progress: 0.30,
-                imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDkp3LLEltJYB96w2jVMeWkdBRug18PdgCDmYeIu6bljjXQ0Sb45iKmKe41VnuBL0osRPZtcoEDZNBOUDKMVYTZSazHAlUWxuZY-Xj_8ZkyRItupotizQNGmzTgisSKAnFAMmhGma9fmumatJZ8IMZud1gd-IrjNA-BBjiCUvzQ5zHy8_W0K7sJPEtfFat-WHgjCcP5M1jzWnNNJsVCmcaJvXRndDB7rgBe5V59Oqv5Ed1PCukiWwKNpY8Vhha3apF0yEiFX3yII53G',
-                theme: theme
-              ),
+            activeSessionsAsync.when(
+              data: (sessions) {
+                if (sessions.isEmpty) {
+                  return const Center(child: Text('Aucun trade en transit.', style: TextStyle(color: Colors.grey)));
+                }
+                
+                return Column(
+                  children: sessions.map((session) {
+                    final title = session['product_id'] ?? 'Produit Inconnu';
+                    final investAmount = (session['current_price'] ?? 0).toString();
+                    
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: GestureDetector(
+                        onTap: () => context.push('/trading-transit', extra: session),
+                        child: _buildTradeItem(
+                          title: title,
+                          subtitle: 'Statut: ${session['status']}',
+                          investAmount: investAmount,
+                          progress: 0.5, // placeholder
+                          imageUrl: 'https://via.placeholder.com/150',
+                          theme: theme
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, stack) => Center(child: Text('Erreur: $err', style: const TextStyle(color: Colors.red))),
             ),
             
             const SizedBox(height: 32),

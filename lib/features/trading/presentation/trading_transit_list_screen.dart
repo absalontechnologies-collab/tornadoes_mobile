@@ -3,12 +3,17 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class TradingTransitListScreen extends StatelessWidget {
-  const TradingTransitListScreen({super.key});
+  final Map<String, dynamic> session;
+
+  const TradingTransitListScreen({super.key, required this.session});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    final String title = session['product_id'] ?? 'Livraison #TR-INCONNU';
+    final String currentPrice = (session['current_price'] ?? 0).toString();
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -16,10 +21,10 @@ class TradingTransitListScreen extends StatelessWidget {
         backgroundColor: isDark ? const Color(0xFF2D3435) : const Color(0xFF5F5E5E),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.white),
-          onPressed: () {},
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => context.pop(),
         ),
-        title: const Text('Tornadoes', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        title: const Text('Détails Transit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
         actions: [
           IconButton(
             icon: const Icon(Icons.account_circle, color: Colors.white),
@@ -44,7 +49,7 @@ class TradingTransitListScreen extends StatelessWidget {
                       children: [
                         const Text('TRADING EN TRANSIT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0)),
                         const SizedBox(height: 8),
-                        const Text('Livraison #TR-8829', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                        Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
                         const SizedBox(height: 8),
                         Text('Suivi de la chaîne de propriété en temps réel pour le fret en cours d\'acheminement.', style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.5)),
                       ],
@@ -60,13 +65,13 @@ class TradingTransitListScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('Prix d\'achat initial', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        const Text('Prix actuel', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.grey)),
                         const SizedBox(height: 4),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            Text('1 250 000', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.primaryColor)),
+                            Text(currentPrice, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.primaryColor)),
                             const SizedBox(width: 4),
                             const Text('FCFA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
                           ],
@@ -110,15 +115,15 @@ class TradingTransitListScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const Positioned(
+                    Positioned(
                       bottom: 16,
                       left: 16,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('LOCALISATION ACTUELLE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70, letterSpacing: 1.0)),
-                          SizedBox(height: 4),
-                          Text('En Transit : Bamako — Dakar', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+                          const Text('STATUT ACTUEL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70, letterSpacing: 1.0)),
+                          const SizedBox(height: 4),
+                          Text(session['status'] ?? 'En cours', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
                         ],
                       ),
                     )
@@ -139,40 +144,18 @@ class TradingTransitListScreen extends StatelessWidget {
               
               const SizedBox(height: 24),
               
-              // Timeline Items
+              // Timeline Items (MOCK)
               Padding(
                 padding: const EdgeInsets.only(left: 16.0),
                 child: Column(
                   children: [
                     _buildTimelineItem(
-                      role: 'PROPRIÉTAIRE INITIAL',
-                      name: 'Mamadou Konaté',
-                      date: '12 Oct. 2023',
-                      status: 'Vendu',
-                      isCurrent: false,
-                      isFirst: true,
-                      isLast: false,
-                      theme: theme,
-                      isDark: isDark
-                    ),
-                    _buildTimelineItem(
-                      role: 'PROPRIÉTAIRE SUIVANT',
-                      name: 'Awa Diop',
-                      date: '14 Oct. 2023',
-                      status: 'Vendu',
-                      isCurrent: false,
-                      isFirst: false,
-                      isLast: false,
-                      theme: theme,
-                      isDark: isDark
-                    ),
-                    _buildTimelineItem(
                       role: 'PROPRIÉTAIRE ACTUEL',
-                      name: 'Koffi Mensah',
-                      date: 'Depuis 15 Oct.',
+                      name: session['current_owner_id']?.toString() ?? 'En recherche',
+                      date: 'Maintenant',
                       status: 'DÉTENTEUR',
                       isCurrent: true,
-                      isFirst: false,
+                      isFirst: true,
                       isLast: true,
                       theme: theme,
                       isDark: isDark
@@ -185,7 +168,7 @@ class TradingTransitListScreen extends StatelessWidget {
               
               // CTA Buy Rights
               GestureDetector(
-                onTap: () => context.push('/trading-transit-details'), // Go to details screen
+                onTap: () => context.push('/trading-transit-details', extra: session),
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -208,9 +191,9 @@ class TradingTransitListScreen extends StatelessWidget {
                         ),
                         child: Column(
                           children: [
-                            const Text('VALEUR ESTIMÉE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0)),
+                            const Text('PRIX D\'ACHAT PROPOSÉ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0)),
                             const SizedBox(height: 4),
-                            Text('1 425 000 FCFA', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: theme.primaryColor)),
+                            Text('$currentPrice FCFA', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: theme.primaryColor)),
                           ],
                         ),
                       ),
@@ -219,7 +202,7 @@ class TradingTransitListScreen extends StatelessWidget {
                         width: double.infinity,
                         height: 56,
                         child: ElevatedButton.icon(
-                          onPressed: () => context.push('/trading-transit-details'),
+                          onPressed: () => context.push('/trading-transit-details', extra: session),
                           icon: const Icon(Icons.shopping_cart_checkout, color: Colors.white),
                           label: const Text('Acheter le droit de propriété', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                           style: ElevatedButton.styleFrom(

@@ -1,20 +1,48 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/providers/auth_provider.dart';
+import '../../../core/services/pusher_service.dart';
+import '../data/providers/delivery_provider.dart';
 
-class DeliveryDashboardScreen extends StatefulWidget {
+class DeliveryDashboardScreen extends ConsumerStatefulWidget {
   const DeliveryDashboardScreen({super.key});
 
   @override
-  State<DeliveryDashboardScreen> createState() => _DeliveryDashboardScreenState();
+  ConsumerState<DeliveryDashboardScreen> createState() => _DeliveryDashboardScreenState();
 }
 
-class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
+class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScreen> {
   bool isOnline = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Souscription Pusher pour les notifications en temps réel
+    PusherService.subscribeToNewDeliveries((event) {
+      if (mounted && isOnline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Nouvelle mission disponible: ${event.data}'),
+            backgroundColor: Theme.of(context).primaryColor,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    PusherService.unsubscribeFromDeliveries();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final user = ref.watch(currentUserProvider);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -51,7 +79,7 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Bon retour,', style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
-                    const Text('Moussa Traoré', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                    Text(user?.userMetadata?['full_name'] ?? 'Partenaire', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
                   ],
                 ),
                 Container(
@@ -122,14 +150,18 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
                               children: [
                                 Text('Revenus du Jour', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.w500)),
                                 const SizedBox(height: 4),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                                  textBaseline: TextBaseline.alphabetic,
-                                  children: [
-                                    const Text('12 450', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
-                                    const SizedBox(width: 4),
-                                    Text('FCFA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.8))),
-                                  ],
+                                ref.watch(driverEarningsProvider).when(
+                                  data: (earnings) => Row(
+                                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                                    textBaseline: TextBaseline.alphabetic,
+                                    children: [
+                                      Text(earnings.toStringAsFixed(0), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
+                                      const SizedBox(width: 4),
+                                      Text('FCFA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.8))),
+                                    ],
+                                  ),
+                                  loading: () => const CircularProgressIndicator(color: Colors.white),
+                                  error: (_, __) => const Text('Erreur', style: TextStyle(color: Colors.red)),
                                 ),
                               ],
                             ),
@@ -202,14 +234,18 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: Colors.grey.withOpacity(0.1)),
                     ),
-                    child: const Column(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('COURSES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0)),
-                        SizedBox(height: 8),
-                        Text('08', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 12),
-                        Row(
+                        const Text('COURSES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0)),
+                        const SizedBox(height: 8),
+                        ref.watch(assignedDeliveriesProvider).when(
+                          data: (deliveries) => Text(deliveries.length.toString().padLeft(2, '0'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                          loading: () => const SizedBox(height: 24, width: 24, child: CircularProgressIndicator()),
+                          error: (_, __) => const Text('!', style: TextStyle(fontSize: 20, color: Colors.red)),
+                        ),
+                        const SizedBox(height: 12),
+                        const Row(
                           children: [
                             Icon(Icons.check_circle, size: 14, color: Colors.grey),
                             SizedBox(width: 4),
@@ -225,171 +261,121 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
             
             const SizedBox(height: 24),
             
-            // Current Delivery Request (Simulation)
-            GestureDetector(
-              onTap: () => context.push('/delivery-request'),
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: theme.primaryColor.withOpacity(0.3), width: 2),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF2D3435) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+            if (isOnline) ...[
+              // Commandes à proximité
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Commandes disponibles', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('VOIR TOUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600, letterSpacing: 1.0)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              ref.watch(pendingDeliveriesProvider).when(
+                data: (deliveries) {
+                  if (deliveries.isEmpty) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24.0),
+                        child: Text('Aucune commande disponible pour le moment.', style: TextStyle(color: Colors.grey)),
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: deliveries.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final delivery = deliveries[index];
+                      return _buildDeliveryCard(delivery, theme, isDark);
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stack) => Center(child: Text('Erreur: $error', style: TextStyle(color: theme.colorScheme.error))),
+              ),
+            ] else ...[
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40.0),
                   child: Column(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.circle, size: 8, color: Colors.red),
-                                SizedBox(width: 6),
-                                Text('NOUVELLE COMMANDE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red, letterSpacing: 1.0)),
-                              ],
-                            ),
-                          ),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              Text('2 500', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: theme.primaryColor)),
-                              const SizedBox(width: 4),
-                              const Text('FCFA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-                            ],
-                          )
-                        ],
-                      ),
+                      Icon(Icons.power_off, size: 64, color: Colors.grey.shade400),
                       const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Column(
-                            children: [
-                              Container(width: 12, height: 12, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey, width: 3))),
-                              Container(width: 2, height: 30, color: Colors.grey.withOpacity(0.3)),
-                              Container(width: 12, height: 12, decoration: BoxDecoration(shape: BoxShape.circle, color: theme.primaryColor)),
-                            ],
-                          ),
-                          const SizedBox(width: 16),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('ENLÈVEMENT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0)),
-                                Text('Restaurant "Le Gourmet", Plateaux', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                                SizedBox(height: 12),
-                                Text('LIVRAISON', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0)),
-                                Text('Résidence Almadies, Villa 45', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          )
-                        ],
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16.0),
-                        child: Divider(),
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.merge_type, size: 16, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          const Text('3.2 km', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 16),
-                          const Icon(Icons.timer, size: 16, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          const Text('12 min', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                          const Spacer(),
-                          const Text('Appuyez pour voir', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500)),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
-                        ],
-                      )
+                      Text('Vous êtes hors ligne', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+                      const SizedBox(height: 8),
+                      Text('Passez en ligne pour recevoir des demandes', style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
                     ],
                   ),
                 ),
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Nearby deliveries list
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Commandes à proximité', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('VOIR TOUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600, letterSpacing: 1.0)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            _buildNearbyTask(theme, isDark, Icons.fastfood, 'Fast Food "Express"', '1.5 km • Préparation', '1 800'),
-            const SizedBox(height: 12),
-            _buildNearbyTask(theme, isDark, Icons.shopping_basket, 'Supermarché "Le Choix"', '2.8 km • Prêt', '2 200'),
-            
+              )
+            ],
           ],
         ),
       ),
     );
   }
-  
-  Widget _buildNearbyTask(ThemeData theme, bool isDark, IconData icon, String title, String subtitle, String amount) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E2122) : Colors.white,
-              borderRadius: BorderRadius.circular(12),
+
+  Widget _buildDeliveryCard(Map<String, dynamic> delivery, ThemeData theme, bool isDark) {
+    final rawId = delivery['id']?.toString() ?? 'N/A';
+    final id = '#ORD-${rawId.length > 4 ? rawId.substring(rawId.length - 4) : rawId}';
+    final amount = delivery['total_amount']?.toString() ?? '0';
+    
+    return GestureDetector(
+      onTap: () {
+        // Optionnel: Passer l'objet de commande à la prochaine vue
+        context.push('/delivery-request', extra: delivery);
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E2122) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.fastfood, color: theme.primaryColor),
             ),
-            child: Icon(icon, color: theme.primaryColor),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500)),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(amount, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                  const SizedBox(width: 2),
-                  const Text('FCFA', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                  Text('Commande $id', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 2),
+                  const Text('À proximité', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500)),
                 ],
               ),
-              const SizedBox(height: 4),
-              const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
-            ],
-          )
-        ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(amount, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    const SizedBox(width: 2),
+                    const Text('FCFA', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
+              ],
+            )
+          ],
+        ),
       ),
     );
   }

@@ -1,9 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../data/repositories/trading_repository.dart';
 
-class TradingSaleScreen extends StatelessWidget {
-  const TradingSaleScreen({super.key});
+class TradingSaleScreen extends StatefulWidget {
+  final String sessionId;
+
+  const TradingSaleScreen({super.key, this.sessionId = '12345'});
+
+  @override
+  State<TradingSaleScreen> createState() => _TradingSaleScreenState();
+}
+
+class _TradingSaleScreenState extends State<TradingSaleScreen> {
+  final TextEditingController _priceController = TextEditingController();
+  final TradingRepository _tradingRepository = TradingRepository();
+  bool _isLoading = false;
+
+  void _listForSale() async {
+    final priceStr = _priceController.text.trim();
+    if (priceStr.isEmpty) return;
+
+    final newPrice = double.tryParse(priceStr);
+    if (newPrice == null) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    await _tradingRepository.sellTradingRight(widget.sessionId, newPrice);
+
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (mounted) {
+      context.push('/trading-confirmation');
+    }
+  }
+
+  @override
+  void dispose() {
+    _priceController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -167,20 +207,21 @@ class TradingSaleScreen extends StatelessWidget {
                   color: Colors.grey.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Expanded(
                       child: TextField(
+                        controller: _priceController,
                         keyboardType: TextInputType.number,
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        decoration: InputDecoration(
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        decoration: const InputDecoration(
                           border: InputBorder.none,
                           hintText: 'Enter amount',
                           hintStyle: TextStyle(fontWeight: FontWeight.normal, color: Colors.grey),
                         ),
                       ),
                     ),
-                    Text('FCFA', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const Text('FCFA', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
                   ],
                 ),
               ),
@@ -229,21 +270,23 @@ class TradingSaleScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 60,
                 child: ElevatedButton(
-                  onPressed: () => context.push('/trading-confirmation'),
+                  onPressed: _isLoading ? null : _listForSale,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.primaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 4,
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('List for Sale', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      SizedBox(width: 12),
-                      Icon(Icons.rocket_launch, size: 20),
-                    ],
-                  ),
+                  child: _isLoading 
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('List for Sale', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            SizedBox(width: 12),
+                            Icon(Icons.rocket_launch, size: 20),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(height: 16),

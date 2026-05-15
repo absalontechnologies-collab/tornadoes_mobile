@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../core/providers/auth_provider.dart';
+import '../data/providers/vendor_provider.dart';
 
-class VendorDashboardScreen extends StatelessWidget {
+class VendorDashboardScreen extends ConsumerWidget {
   const VendorDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final user = ref.watch(currentUserProvider);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -44,7 +48,7 @@ class VendorDashboardScreen extends StatelessWidget {
                       children: [
                         const Text('Tableau de bord', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
                         const SizedBox(height: 8),
-                        Text('Bienvenue, Boutique Horizon Sahel', style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                        Text('Bienvenue, ${user?.userMetadata?['full_name'] ?? 'Partenaire'}', style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -90,15 +94,19 @@ class VendorDashboardScreen extends StatelessWidget {
                                 children: [
                                   const Text('REVENUS DU MOIS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0)),
                                   const SizedBox(height: 8),
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                                    textBaseline: TextBaseline.alphabetic,
-                                    children: [
-                                      const Text('1.240.500', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                                      const SizedBox(width: 4),
-                                      const Text('FCFA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                                    ],
-                                  )
+                                  ref.watch(vendorEarningsStreamProvider).when(
+                                    data: (earnings) => Row(
+                                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                                      textBaseline: TextBaseline.alphabetic,
+                                      children: [
+                                        Text(earnings.toStringAsFixed(0), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                                        const SizedBox(width: 4),
+                                        const Text('FCFA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                      ],
+                                    ),
+                                    loading: () => const CircularProgressIndicator(),
+                                    error: (_, __) => const Text('Erreur', style: TextStyle(color: Colors.red)),
+                                  ),
                                 ],
                               ),
                               Container(

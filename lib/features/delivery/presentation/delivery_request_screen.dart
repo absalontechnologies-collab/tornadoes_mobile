@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../data/providers/delivery_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 
-class DeliveryRequestScreen extends StatelessWidget {
-  const DeliveryRequestScreen({super.key});
+class DeliveryRequestScreen extends ConsumerWidget {
+  final Map<String, dynamic>? deliveryData;
+  const DeliveryRequestScreen({super.key, this.deliveryData});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    final rawId = deliveryData?['id']?.toString() ?? 'N/A';
+    final shortId = '#ORD-${rawId.length > 4 ? rawId.substring(rawId.length - 4) : rawId}';
+    final amount = deliveryData?['total_amount']?.toString() ?? '2500';
 
     return Scaffold(
       body: Stack(
@@ -91,24 +99,24 @@ class DeliveryRequestScreen extends StatelessWidget {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Column(
+                        Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('NOUVELLE MISSION', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2.0)),
-                            SizedBox(height: 4),
-                            Text('Livraison Express', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+                            const Text('NOUVELLE MISSION', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2.0)),
+                            const SizedBox(height: 4),
+                            Text('Commande $shortId', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
                           ],
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            const Row(
+                            Row(
                               crossAxisAlignment: CrossAxisAlignment.baseline,
                               textBaseline: TextBaseline.alphabetic,
                               children: [
-                                Text('2500', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
-                                SizedBox(width: 4),
-                                Text('FCFA', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text(amount, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
+                                const SizedBox(width: 4),
+                                const Text('FCFA', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),
                             Text('Gain estimé', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)),
@@ -266,8 +274,29 @@ class DeliveryRequestScreen extends StatelessWidget {
                             Expanded(
                               flex: 5,
                               child: ElevatedButton(
-                                onPressed: () {
-                                  context.push('/delivery-tracking');
+                                onPressed: () async {
+                                  final user = ref.read(currentUserProvider);
+                                  if (user == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Utilisateur non connecté.')));
+                                    return;
+                                  }
+
+                                  if (deliveryData != null && deliveryData!['id'] != null) {
+                                    try {
+                                      final success = await ref.read(deliveryRepositoryProvider).takeDelivery(deliveryData!['id'] as int, user.id);
+                                      if (success && context.mounted) {
+                                        context.push('/delivery-tracking', extra: deliveryData);
+                                      } else if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impossible de s\'assigner à cette livraison. Profil Livreur manquant ?')));
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+                                      }
+                                    }
+                                  } else {
+                                    context.push('/delivery-tracking');
+                                  }
                                 },
                                 style: ElevatedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(vertical: 16),
